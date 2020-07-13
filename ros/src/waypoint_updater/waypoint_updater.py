@@ -3,7 +3,9 @@
 import rospy
 from geometry_msgs.msg import PoseStamped
 from styx_msgs.msg import Lane, Waypoint
+from scipy.spatial import KDTree
 
+import numpy as np
 import math
 
 '''
@@ -37,16 +39,76 @@ class WaypointUpdater(object):
         self.final_waypoints_pub = rospy.Publisher('final_waypoints', Lane, queue_size=1)
 
         # TODO: Add other member variables you need below
+        self.pose = None
+        self.base_waypoints = None
+        self.waypoints_2d = None
+        self.waypoint_tree = None
+        self.loop()
 
-        rospy.spin()
+    def loop(self):
+        # Could probably go as low as 30Hz since waypoint follower
+        # is running at 30Hz
+        rate = rospy.Rate(50)
+        while not rospy.is_shutdown():
+            if self.pose and self.base_waypoints:
+                # Get closest waypoint
+                closest_waypoint_idx = self.get_closest_waypoint_id()
+                self.publish_waypoints(closest_waypoint_idx)
+            rate.sleep()
+
+    def get_closest_waypoint_id(self):
+        # First let's query the KDTree to determine the coordinate
+        # of the nearest waypoint.
+        x = self.pose.pose.position.x
+        y = self.pose.pose.position.y
+        closest_idx = self.waypoint_tree.query([x, y], 1)[1]
+
+        # Next we'll check if the closest waypoint is actually behind us.
+        closest_coord = self.waypoints_2d[closest_idx]
+        prev_coord = self.waypoints_2d[closest_idx-1]
+
+        # Equation for hyperplane through closest_coords
+        cl_vect = np.array(closest_coord)
+        prev_vect = np.array(prev_coord)
+        pos_vect = np.array([x, y])
+
+        # The two inputs here are the vector originating at the previous coordinate
+        # and pointing to the closest coordinate, and the vector originating at the
+        # closest waypoint and pointing to our current pose.
+
+        # The sign of the dot product will tell us if the operand vectors
+        # are pointing in opposite directions or not. If they are pointing in
+        # the opposite direction that means our current pose is behind the
+        # hyperplane that's perpendicular to the direction of the previous to
+        # current waypoint vector, and the dot product will be negative.
+        val = np.dot(cl_vect - prev_vect, pos_vect - cl_vect)
+
+        # If the closest waypoint is actually behind us (positive dot product),
+        # let's simply take the next waypoint ahead
+        if val > 0:
+            closest_idx = (closest_idx + 1) % len(self.waypoints_2d)
+        return closest_idx
+
+    def publish_waypoints(self, closest_idx):
+        lane = Lane()
+        lane.header = self.base_waypoints.header # not used
+
+        # We'll publish at most LOOKAHEAD_WPS waypoints, but as the slicing here implies,
+        # when we get close to the end of the list, the number of waypoints we publish will be
+        # less than LOOKAHEAD_WPS
+        lane.waypoints = self.base_waypoints.waypoints[closest_idx:closest_idx + LOOKAHEAD_WPS]
+        self.final_waypoints_pub.publish(lane)
 
     def pose_cb(self, msg):
-        # TODO: Implement
+        self.pose = msg
         pass
 
     def waypoints_cb(self, waypoints):
-        # TODO: Implement
-        pass
+        if not self.waypoints_2d:
+            self.waypoints_2d = [[waypoint.pose.pose.position.x, waypoint.pose.pose.position.y] for waypoint in waypoints.waypoints]
+            self.waypoint_tree = KDTree(self.waypoints_2d)
+        # Set this at the end to avoid race conditions
+        self.base_waypoints = waypoints
 
     def traffic_cb(self, msg):
         # TODO: Callback for /traffic_waypoint message. Implement
