@@ -8,8 +8,6 @@ import math
 
 from twist_controller import Controller
 
-from std_msgs.msg import Bool
-
 '''
 You can build this node only after you have built (or partially built) the `waypoint_updater` node.
 
@@ -33,7 +31,8 @@ that we have created in the `__init__` function.
 
 '''
 
-from geometry_msgs.msg import PoseStamped, Quaternion, TwistStamped
+from std_msgs.msg import Bool
+from geometry_msgs.msg import TwistStamped
 
 class DBWNode(object):
     def __init__(self):
@@ -73,13 +72,14 @@ class DBWNode(object):
     def loop(self):
         rate = rospy.Rate(50) # 50Hz
         while not rospy.is_shutdown():
-            throttle, brake, steering = self.controller.control(self.desired_velocity.twist.twist.linear,
-                                                                self.desired_velocity.twist.twist.angular,
-                                                                self.current_velocity.twist.twist.linear,
-                                                                self.dbw_enabled)
-            # Only publish when dbw is enabled
-            if self.dbw_enabled:
-              self.publish(throttle, brake, steer)
+            while not None in (self.current_velocity, self.desired_velocity):
+                throttle, brake, steering = self.controller.control(self.desired_velocity.twist.linear.x,
+                                                                    self.desired_velocity.twist.angular.z,
+                                                                    self.current_velocity.twist.linear.x,
+                                                                    self.dbw_enabled)
+                # Only publish when dbw is enabled
+                if self.dbw_enabled:
+                  self.publish(throttle, brake, steering)
             rate.sleep()
 
     def publish(self, throttle, brake, steer):
