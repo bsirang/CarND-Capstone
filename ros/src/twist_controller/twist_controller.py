@@ -34,17 +34,16 @@ class Controller(object):
 
         self.last_time = rospy.get_time()
 
-    def control(self, linear_vel, angular_vel, current_vel, dbw_enabled):
+    def control(self, linear_vel_target, angular_vel_target, linear_vel_current, dbw_enabled):
         if not dbw_enabled:
             self.throttle_controller.reset()
             return 0., 0., 0.
 
-        current_vel = self.vel_lpf.filt(current_vel)
+        linear_vel_filt = self.vel_lpf.filt(linear_vel_current)
 
-        steering = self.yaw_controller.get_steering(linear_vel, angular_vel, current_vel)
+        steering = self.yaw_controller.get_steering(linear_vel_target, angular_vel_target, linear_vel_filt)
 
-        vel_error = linear_vel - current_vel
-        self.vel_last = current_vel
+        vel_error = linear_vel_target - linear_vel_filt
 
         current_time = rospy.get_time()
         sample_time = current_time - self.last_time
@@ -53,13 +52,12 @@ class Controller(object):
         throttle = self.throttle_controller.step(vel_error, sample_time)
         brake = 0
 
-        if linear_vel == 0. and current_vel < 0.1:
+        if linear_vel_target == 0. and linear_vel_filt < 0.1:
             throttle = 0
-            brake = 400 # N*m to hold the car in place if we are stopped at a light.
+            brake = 700 # N*m to hold the car (Carla) in place if we are stopped at a light.
         elif throttle < self.brake_deadband and vel_error < 0:
             throttle = 0
             decel = max(vel_error, self.decel_limit)
             # Braking Torque = Vehicle mass * wheel radius * desired acceleration
             brake = abs(decel) * self.vehicle_mass * self.wheel_radius
-
         return throttle, brake, steering

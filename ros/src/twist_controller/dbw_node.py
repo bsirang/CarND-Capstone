@@ -61,7 +61,8 @@ class DBWNode(object):
 
         self.dbw_enabled = False
         self.current_velocity = None
-        self.desired_velocity = None
+        self.desired_velocity_linear = None
+        self.desired_velocity_angular = None
 
         rospy.Subscriber('/current_velocity', TwistStamped, self.current_velocity_cb)
         rospy.Subscriber('/twist_cmd', TwistStamped, self.twist_cmd_cb)
@@ -70,16 +71,16 @@ class DBWNode(object):
         self.loop()
 
     def loop(self):
-        rate = rospy.Rate(50) # 50Hz
+        rate = rospy.Rate(20)
         while not rospy.is_shutdown():
-            while not None in (self.current_velocity, self.desired_velocity):
-                throttle, brake, steering = self.controller.control(self.desired_velocity.twist.linear.x,
-                                                                    self.desired_velocity.twist.angular.z,
-                                                                    self.current_velocity.twist.linear.x,
+            if not None in (self.current_velocity, self.desired_velocity_linear, self.desired_velocity_angular):
+                throttle, brake, steering = self.controller.control(self.desired_velocity_linear,
+                                                                    self.desired_velocity_angular,
+                                                                    self.current_velocity,
                                                                     self.dbw_enabled)
                 # Only publish when dbw is enabled
                 if self.dbw_enabled:
-                  self.publish(throttle, brake, steering)
+                    self.publish(throttle, brake, steering)
             rate.sleep()
 
     def publish(self, throttle, brake, steer):
@@ -101,10 +102,11 @@ class DBWNode(object):
         self.brake_pub.publish(bcmd)
 
     def current_velocity_cb(self, msg):
-        self.current_velocity = msg
+        self.current_velocity = msg.twist.linear.x
 
     def twist_cmd_cb(self, msg):
-        self.desired_velocity = msg
+        self.desired_velocity_linear = msg.twist.linear.x
+        self.desired_velocity_angular = msg.twist.angular.z
 
     def dbw_enabled_cb(self, msg):
         self.dbw_enabled = msg.data
