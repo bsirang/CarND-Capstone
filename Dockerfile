@@ -18,7 +18,10 @@ RUN apt-get upgrade -y
 # install python packages
 RUN apt-get install -y python-pip
 COPY requirements.txt ./requirements.txt
-RUN pip install -r requirements.txt
+RUN easy_install pip==20.02
+RUN python -m pip install testresources
+RUN python -m pip install setuptools==44.0.0
+RUN python -m pip install -r requirements.txt
 
 # install required ros dependencies
 RUN apt-get install -y ros-$ROS_DISTRO-cv-bridge
