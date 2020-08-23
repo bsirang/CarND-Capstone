@@ -31,6 +31,10 @@ RUN apt-get install -y ros-$ROS_DISTRO-image-proc
 # socket io
 RUN apt-get install -y netbase
 
+# Fix for camera images
+# https://github.com/udacity/CarND-Capstone/issues/107
+RUN python -m pip install Pillow==6.2.2
+
 RUN mkdir /capstone
 VOLUME ["/capstone"]
 VOLUME ["/root/.ros/log/"]
