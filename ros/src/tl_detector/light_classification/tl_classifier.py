@@ -4,6 +4,18 @@ import numpy as np
 import cv2
 
 class TLClassifier(object):
+    """
+    A class for classifying traffic lights.
+
+    This class uses the Mobilenet COCO SSD pre-trained model for object detection
+    and classification. This model contains 90 different object classifications,
+    one of which are traffic lights.
+
+    The model is used to detect the traffic lights and their bounding boxes.
+    After which a heuristic color analysis is used to identify the traffic light
+    color. This approach was chosen for its simplicity.
+
+    """
     def __init__(self):
         self.graph_file = 'ssd_mobilenet_v1_coco_11_06_2017/frozen_inference_graph.pb'
         self.graph = self.load_graph(self.graph_file)
@@ -24,8 +36,12 @@ class TLClassifier(object):
 
         self.sess = tf.Session(graph=self.graph)
 
+        # Classification index for traffic lights from SSD Mobilenet V1 COCO
+        self.traffic_light_class = 10
+
     @staticmethod
     def color_detection(image):
+        color_strength_threshold = 10
         R = image[:,:,0].flatten()
         G = image[:,:,1].flatten()
         B = image[:,:,2].flatten()
@@ -33,9 +49,9 @@ class TLClassifier(object):
         G_avg = np.sum(G) / len(G)
         B_avg = np.sum(B) / len(B)
         #print("{} {} {}".format(R_avg, G_avg, B_avg))
-        if R_avg - G_avg > 10:
+        if R_avg - G_avg > color_strength_threshold:
             return TrafficLight.RED
-        elif G_avg - R_avg > 10:
+        elif G_avg - R_avg > color_strength_threshold:
             return TrafficLight.GREEN
         else:
             return TrafficLight.YELLOW
@@ -127,7 +143,7 @@ class TLClassifier(object):
         boxes, scores, classes = self.filter_boxes(confidence_cutoff, boxes, scores, classes)
 
         # Filter boxes that are classified as traffic lights
-        boxes, scores, classes = self.filter_class(10, boxes, scores, classes)
+        boxes, scores, classes = self.filter_class(self.traffic_light_class, boxes, scores, classes)
 
         if len(scores) == 0:
             return TrafficLight.UNKNOWN
