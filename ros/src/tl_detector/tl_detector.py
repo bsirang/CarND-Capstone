@@ -11,9 +11,16 @@ import tf
 import cv2
 import yaml
 from scipy.spatial import KDTree
+import time
 
 
 STATE_COUNT_THRESHOLD = 3
+
+# Set to True to save images for training purposes
+SAVE_IMAGES_TO_DISK=False
+
+# Only process every 'n' image
+IMAGE_PROCESSING_INTERVAL=3
 
 class TLDetector(object):
     def __init__(self):
@@ -23,6 +30,7 @@ class TLDetector(object):
         self.waypoints = None
         self.waypoint_tree = None
         self.camera_image = None
+        self.image_process_count = IMAGE_PROCESSING_INTERVAL
         self.lights = []
 
         sub1 = rospy.Subscriber('/current_pose', PoseStamped, self.pose_cb)
@@ -74,9 +82,19 @@ class TLDetector(object):
             msg (Image): image from car-mounted camera
 
         """
-        self.has_image = True
+        if self.image_process_count < IMAGE_PROCESSING_INTERVAL:
+            self.image_process_count += 1
+            return
+        else:
+            self.image_process_count = 0
+
         self.camera_image = msg
+
         light_wp, state = self.process_traffic_lights()
+
+        if SAVE_IMAGES_TO_DISK == True:
+            self.save_image(msg, state)
+            return
 
         '''
         Publish upcoming red lights at camera frequency.
@@ -95,6 +113,26 @@ class TLDetector(object):
         else:
             self.upcoming_red_light_pub.publish(Int32(self.last_wp))
         self.state_count += 1
+
+    def save_image(self, msg, state):
+        cv_image = self.bridge.imgmsg_to_cv2(self.camera_image, "rgb8")
+        filename = 'image_' + str(int(time.time()*1000)) + '.jpg'
+
+        with open("labels.txt", 'a') as file:
+            cv2.imwrite(filename, cv_image)
+            file.write(filename + ',' + self.get_state_string(state) + '\n')
+            rospy.loginfo("Saved {}".format(filename))
+
+    @staticmethod
+    def get_state_string(state):
+        if state == TrafficLight.RED:
+            return "RED"
+        elif state == TrafficLight.GREEN:
+            return "GREEN"
+        elif state == TrafficLight.YELLOW:
+            return "YELLOW"
+        else:
+            return "UNKNOWN"
 
     def get_closest_waypoint(self, x, y):
         """Identifies the closest path waypoint to the given position
@@ -120,16 +158,13 @@ class TLDetector(object):
 
         """
 
-        return light.state # simulator only
+        # uncomment to bypass classifier (simulation only)
+        #return light.state
 
-        #if(not self.has_image):
-        #    self.prev_light_loc = None
-        #    return False
-
-        #cv_image = self.bridge.imgmsg_to_cv2(self.camera_image, "bgr8")
+        cv_image = self.bridge.imgmsg_to_cv2(self.camera_image, "rgb8")
 
         #Get classification
-        #return self.light_classifier.get_classification(cv_image)
+        return self.light_classifier.get_classification(cv_image)
 
     def process_traffic_lights(self):
         """Finds closest visible traffic light, if one exists, and determines its
