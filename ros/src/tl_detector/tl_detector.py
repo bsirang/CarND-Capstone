@@ -32,6 +32,14 @@ class TLDetector(object):
         self.camera_image = None
         self.image_process_count = IMAGE_PROCESSING_INTERVAL
         self.lights = []
+        self.bridge = CvBridge()
+        self.light_classifier = TLClassifier()
+        self.listener = tf.TransformListener()
+
+        self.state = TrafficLight.UNKNOWN
+        self.last_state = TrafficLight.UNKNOWN
+        self.last_wp = -1
+        self.state_count = 0
 
         sub1 = rospy.Subscriber('/current_pose', PoseStamped, self.pose_cb)
         sub2 = rospy.Subscriber('/base_waypoints', Lane, self.waypoints_cb)
@@ -50,15 +58,6 @@ class TLDetector(object):
         self.config = yaml.load(config_string)
 
         self.upcoming_red_light_pub = rospy.Publisher('/traffic_waypoint', Int32, queue_size=1)
-
-        self.bridge = CvBridge()
-        self.light_classifier = TLClassifier()
-        self.listener = tf.TransformListener()
-
-        self.state = TrafficLight.UNKNOWN
-        self.last_state = TrafficLight.UNKNOWN
-        self.last_wp = -1
-        self.state_count = 0
 
         rospy.spin()
 
@@ -82,6 +81,9 @@ class TLDetector(object):
             msg (Image): image from car-mounted camera
 
         """
+        if not self.waypoint_tree:
+            return # wait until we constructed the waypoint tree
+
         if self.image_process_count < IMAGE_PROCESSING_INTERVAL:
             self.image_process_count += 1
             return
